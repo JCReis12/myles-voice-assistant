@@ -49,14 +49,31 @@ def main():
 
     try:
         for phrase in listener.listen():
-            print(f"[debug] Vosk reconheceu: '{phrase}'")
-            command_text = command_parser.extract_command(phrase)
-            if command_text is None:
-                # Wake word ("Myles") não detectada nesta frase — ignora.
+            print(f"[DEBUG] Vosk reconheceu: '{phrase}'")
+
+            wake_word, command_text = command_parser.extract_command(phrase)
+            if wake_word is None:
+                # Nenhuma variante da wake word ("Myles") apareceu — ignora.
                 continue
 
             play_activation_sound(config.ACTIVATION_SOUND)
-            intent = command_parser.parse_intent(command_text)
+
+            print(f"[DEBUG] Wake word: '{wake_word}'")
+            print(f"[DEBUG] Comando: '{command_text}'")
+
+            intent, scores = command_parser.classify_intent(command_text)
+
+            if scores:
+                ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+                scores_str = ", ".join(f"{name}={score}" for name, score in ranked)
+                print(f"[DEBUG] Pontuação: {scores_str}")
+            else:
+                print("[DEBUG] Pontuação: nenhuma intenção pontuou")
+
+            if intent is None:
+                print("[DEBUG] Nenhuma intenção confiável encontrada.")
+            else:
+                print(f"[DEBUG] Executando: {intent}")
 
             if intent == "shutdown":
                 voice.speak("Até mais.")

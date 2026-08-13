@@ -227,13 +227,111 @@ dispositivo como padrão; nenhuma alteração de código é necessária.
 
 **Estratégia de wake word**: em vez de um wake-word engine dedicado (que
 adicionaria bastante complexidade a uma V1), o Myles ouve frases completas
-continuamente e verifica se a palavra "myles" aparece no texto reconhecido.
-Se aparecer, tudo o que vem depois dela é tratado como o comando. Essa
-abordagem é simples, confiável offline e adequada ao escopo da V1.
+continuamente e verifica se alguma variante de "myles" aparece no texto
+reconhecido (veja seção 8.1 sobre por que existem várias variantes).
 
-Pequenas variações de fala ("abra"/"abre"/"pode abrir") são normalizadas e
-comparadas com uma lista de frases por intenção em
-`core/command_parser.py` — sem uso de IA ou modelos de linguagem.
+### 8.1. Por que várias variantes de "Myles"?
+
+O modelo Vosk usado é treinado em português e não conhece o nome "Myles" —
+ele transcreve o som foneticamente, geralmente como **"mails"** ou
+**"miles"**. Por isso `WAKE_WORD` no `.env` aceita uma lista separada por
+vírgula (`myles,mails,miles,maiuls,my less`). Se notar outra variante nos
+logs de debug, adicione-a ali — não precisa mexer em código.
+
+### 8.2. Interpretação de comandos por palavras-chave e pontuação
+
+A partir da versão atual, o Myles **não exige mais frases quase idênticas**
+às cadastradas. A interpretação (em `core/command_parser.py`) funciona por
+**palavras-chave com peso, combinações e prioridade** — continua 100%
+determinístico, sem IA, LLM ou qualquer modelo generativo:
+
+1. O texto reconhecido é normalizado (minúsculas, sem acento, sem
+   pontuação, e variações como `front-end`/`front end`/`frontend` viram
+   um único token).
+2. A wake word é removida do início.
+3. Cada intenção soma pontos para cada palavra-chave do comando que
+   aparecer em `INTENT_KEYWORDS` (palavras mais decisivas têm peso maior;
+   palavras genéricas como "ambiente" têm peso baixo de propósito).
+4. Combinações de palavras (`INTENT_COMBOS`) dão um bônus extra — por
+   exemplo, "ambiente" + "frontend" juntos valem mais do que a soma das
+   duas palavras isoladas.
+5. Comandos curtos (1-2 palavras após a wake word, como "Myles, sair" ou
+   "Myles, Teams") recebem um bônus adicional, já que são naturalmente
+   mais deliberados e menos ambíguos que uma palavra solta no meio de uma
+   frase longa.
+6. Intenções específicas suprimem intenções genéricas relacionadas
+   (`SPECIFICITY_OVERRIDES`) — por exemplo, se a palavra "frontend" ou
+   "backend" aparece, `OPEN_DEVELOPMENT` e `OPEN_WORK_TABS` são
+   descartados, para que "ambiente de desenvolvimento frontend" resulte
+   em `OPEN_FRONTEND`, não em `OPEN_DEVELOPMENT`.
+7. A intenção com maior pontuação vence, desde que:
+   - a pontuação seja pelo menos `MIN_INTENT_SCORE` (padrão: 3);
+   - a diferença para a 2ª colocada seja pelo menos `MIN_SCORE_MARGIN`
+     (padrão: 2) — caso contrário, o resultado é tratado como ambíguo e
+     nada é executado.
+
+Ambos os limiares são configuráveis no `.env`.
+
+**Exemplo prático** — "Myles, prepara meu ambiente de frontend":
+
+```
+[DEBUG] Vosk reconheceu: 'mails prepara meu ambiente de frontend'
+[DEBUG] Wake word: 'mails'
+[DEBUG] Comando: 'prepara meu ambiente de frontend'
+[DEBUG] Pontuação: open_frontend_environment=9
+[DEBUG] Executando: open_frontend_environment
+```
+
+**Limitação conhecida**: como o sistema não entende gramática, uma
+palavra-chave de peso alto (ex: "frontend", "teams") em qualquer lugar de
+uma frase — mesmo incidental — pode disparar a intenção correspondente
+(ex: "essa reunião sobre frontend foi cancelada" ainda ativa
+`OPEN_FRONTEND`). Isso é intencional: pesos baixos o suficiente para
+evitar esse caso também impediriam comandos curtos e diretos como
+"Myles, frontend". Se isso incomodar no seu uso, ajuste os pesos em
+`INTENT_KEYWORDS` (`core/command_parser.py`) ou aumente `MIN_INTENT_SCORE`
+no `.env`.
+
+Pequenas variações de fala ("abra"/"abre"/"pode abrir"/"quero abrir") são
+naturalmente aceitas porque a maioria dos verbos não entra na pontuação —
+o que importa são as palavras-chave que identificam a intenção.
+
+### 8.3. Testando a interpretação sem usar voz
+
+```powershell
+python test_commands.py
+```
+
+- Opção **7**: digite frases livremente e veja a wake word detectada, o
+  comando extraído, a pontuação de cada intenção e a intenção vencedora —
+  sem abrir nenhum aplicativo.
+- Opção **8**: roda uma bateria automática de casos de teste (inclusive os
+  casos de ambiguidade entre `OPEN_DEVELOPMENT`/`OPEN_FRONTEND`/
+  `OPEN_BACKEND`/`OPEN_WORK_TABS`) e mostra quantos passaram — útil sempre
+  que você ajustar pesos ou adicionar uma intenção nova.
+
+### 8.4. Adicionando uma nova intenção na V2
+
+Exemplo: "Myles, abre meu projeto de Data Engineering".
+
+1. Em `core/command_parser.py`, adicione a intenção em `INTENT_KEYWORDS`:
+   ```python
+   "open_data_engineering_project": {
+       "dados": 2, "data": 2, "engenharia": 3, "engineering": 3,
+       "pipeline": 3, "etl": 4, "ambiente": 1,
+   },
+   ```
+2. (Opcional) Adicione uma combinação em `INTENT_COMBOS`:
+   ```python
+   ("open_data_engineering_project", {"ambiente", "dados"}, 2),
+   ```
+3. (Opcional) Se a nova intenção deve vencer alguma genérica (como
+   `OPEN_DEVELOPMENT`), registre em `SPECIFICITY_OVERRIDES`.
+4. Crie a função de automação em `commands/` e registre-a em
+   `core/executor.py` (`ACTIONS` e `RESPONSES`), exatamente como já é
+   feito hoje — nada muda no executor.
+5. Rode `python test_commands.py` (opção 7 ou 8) para validar antes de
+   testar por voz.
 
 ---
 
@@ -266,44 +364,21 @@ O Myles executa **somente** ações explicitamente programadas em
 
 ## 11. Adicionando novos comandos (preparação para V2)
 
-A arquitetura foi pensada para crescer sem reescrever o projeto:
+A arquitetura foi pensada para crescer sem reescrever o projeto. O passo a
+passo completo, com o novo sistema de palavras-chave e pontuação, está na
+seção **8.4**. Resumo rápido:
 
 1. **Crie a função de automação** em um módulo de `commands/` (ou crie um
    novo módulo, ex: `commands/data_engineering.py`).
 2. **Registre a intenção** em `core/command_parser.py`, adicionando uma
-   nova chave em `INTENTS` com as variações de frase aceitas.
+   nova chave em `INTENT_KEYWORDS` com as palavras-chave e pesos (e,
+   opcionalmente, uma combinação em `INTENT_COMBOS`).
 3. **Ligue a intenção à função** em `core/executor.py`, adicionando entradas
    em `ACTIONS` (obrigatório) e `RESPONSES` (frase de confirmação falada).
 4. Se o novo comando precisar de caminhos/URLs, adicione-os em `config.py`
    e no `.env` — nunca hardcode dentro de `commands/`.
-
-Exemplo (comando fictício "Myles, abra meu projeto de Data Engineering"):
-
-```python
-# commands/data_engineering.py
-import config
-from commands import applications
-
-def open_data_engineering_project():
-    applications._open_shortcut(
-        config.VSCODE_PATH, arguments=f'"{config.DATA_ENGINEERING_PATH}"'
-    )
-```
-
-```python
-# core/command_parser.py
-INTENTS["open_data_engineering_project"] = [
-    "abra meu projeto de data engineering",
-    "abrir projeto de data engineering",
-]
-```
-
-```python
-# core/executor.py
-from commands import data_engineering
-ACTIONS["open_data_engineering_project"] = data_engineering.open_data_engineering_project
-RESPONSES["open_data_engineering_project"] = "Projeto de Data Engineering aberto."
-```
+5. Valide com `python test_commands.py` (opções 7 e 8) antes de testar por
+   voz.
 
 Comandos como "Myles, faça o commit" (automação Git) seguem exatamente o
 mesmo padrão e ficam reservados para uma versão futura, conforme
@@ -366,4 +441,3 @@ A) ou desabilitar/excluir a tarefa (Opção B).
   para o uso pessoal da V1.
 - A qualidade da voz masculina em português depende das vozes SAPI5
   instaladas no Windows (veja seção 7).
-"# myles-voice-assistant" 
