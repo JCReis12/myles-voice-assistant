@@ -92,4 +92,22 @@ VOSK_MODEL_PATH = _get(
 )
 
 # Palavra de ativação exigida antes de qualquer comando.
-WAKE_WORD = _get("WAKE_WORD", "myles,mails,miles,maiuls,my less")
+#
+# IMPORTANTE: o modelo de reconhecimento (Vosk) é treinado em português e
+# não conhece o nome "Myles" — ele transcreve o que ouve foneticamente,
+# geralmente como "mails" ou "miles". Por isso aceitamos várias variantes
+# como válidas (veja core/command_parser.py). Se notar outras transcrições
+# no log de debug do main.py, adicione-as aqui separadas por vírgula.
+WAKE_WORD = _get("WAKE_WORD", "myles,mails,miles,maiuls,my less,maia,maio,maior,maiores")
+
+# --------------------------------------------------------------------
+# Interpretação de comandos (core/command_parser.py)
+# --------------------------------------------------------------------
+# Pontuação mínima para que uma intenção seja considerada válida. Abaixo
+# disso, o Myles responde "Desculpe, não entendi o comando."
+MIN_INTENT_SCORE = int(_get("MIN_INTENT_SCORE", "3"))
+
+# Diferença mínima de pontuação entre a intenção 1ª e a 2ª colocada para
+# não considerar o resultado ambíguo. Se a diferença for menor que isso,
+# o Myles não executa nada (evita "chutar" entre duas intenções próximas).
+MIN_SCORE_MARGIN = int(_get("MIN_SCORE_MARGIN", "2"))
