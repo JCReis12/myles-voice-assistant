@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Modelo do Vosk é grande (~50MB a alguns GB) — não deve ir para o Git.
+models/
