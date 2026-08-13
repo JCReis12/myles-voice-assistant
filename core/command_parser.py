@@ -16,7 +16,7 @@ import unicodedata
 
 import config
 
-WAKE_WORD = config.WAKE_WORD.lower()
+WAKE_WORDS = [w.strip().lower() for w in config.WAKE_WORD.split(",") if w.strip()]
 
 
 def _normalize(text: str) -> str:
@@ -100,17 +100,20 @@ INTENTS = {
 
 def extract_command(text: str):
     """
-    Procura a wake word ("myles") na frase reconhecida. Se encontrada,
-    retorna o texto normalizado que vem depois dela (o comando em si).
-    Se a wake word não aparecer, retorna None e a frase é ignorada.
+    Procura alguma variante da wake word (ex: "myles", "mails", "miles")
+    na frase reconhecida. Se encontrada, retorna o texto normalizado que
+    vem depois dela (o comando em si). Se nenhuma variante aparecer,
+    retorna None e a frase é ignorada.
     """
     norm = _normalize(text)
-    idx = norm.find(WAKE_WORD)
-    if idx == -1:
-        return None
-    command_text = norm[idx + len(WAKE_WORD):].strip()
-    command_text = re.sub(r"^,?\s*", "", command_text)
-    return command_text
+    for wake in WAKE_WORDS:
+        idx = norm.find(wake)
+        if idx == -1:
+            continue
+        command_text = norm[idx + len(wake):].strip()
+        command_text = re.sub(r"^,?\s*", "", command_text)
+        return command_text
+    return None
 
 
 def parse_intent(command_text: str):

@@ -92,4 +92,4 @@ VOSK_MODEL_PATH = _get(
 )
 
 # Palavra de ativação exigida antes de qualquer comando.
-WAKE_WORD = _get("WAKE_WORD", "myles")
+WAKE_WORD = _get("WAKE_WORD", "myles,mails,miles,maiuls,my less")
