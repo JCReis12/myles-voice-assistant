@@ -49,6 +49,7 @@ def main():
 
     try:
         for phrase in listener.listen():
+            print(f"[debug] Vosk reconheceu: '{phrase}'")
             command_text = command_parser.extract_command(phrase)
             if command_text is None:
                 # Wake word ("Myles") não detectada nesta frase — ignora.
