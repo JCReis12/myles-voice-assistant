@@ -44,7 +44,8 @@ def _print_classification(text: str):
         print("  Pontuação: " + ", ".join(f"{name}={score}" for name, score in ranked))
     else:
         print("  Pontuação: nenhuma intenção pontuou")
-    print(f"  Intenção:  {intent or '(nenhuma — \"Desculpe, não entendi o comando\")'}")
+    mensagem_padrao = '(nenhuma — "Desculpe, não entendi o comando")'
+    print(f"  Intenção:  {intent or mensagem_padrao}")
 
 
 def test_parser_interactive():
