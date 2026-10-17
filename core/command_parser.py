@@ -112,11 +112,73 @@ def _normalize(text: str) -> str:
     return text
 
 
+def _levenshtein(a: str, b: str) -> int:
+    """Distância de Levenshtein entre duas strings (edição mínima)."""
+    if len(a) < len(b):
+        return _levenshtein(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(
+                prev[j + 1] + 1,      # deletion
+                curr[j] + 1,           # insertion
+                prev[j] + (ca != cb),  # substitution
+            ))
+        prev = curr
+    return prev[-1]
+
+
+# Distância máxima de Levenshtein para considerar uma palavra como variante
+# fonética da wake word. Para palavras curtas (4 letras) usamos dist ≤ 1;
+# para palavras maiores (5+) usamos dist ≤ 2.
+FUZZY_MAX_DISTANCE_SHORT = 1   # para palavras de 4 letras
+FUZZY_MAX_DISTANCE_LONG = 2    # para palavras de 5+ letras
+
+# Comprimento mínimo de palavra para aplicar fuzzy matching — palavras
+# de 1-3 letras casariam com quase qualquer coisa e geram falsos positivos.
+FUZZY_MIN_WORD_LEN = 4
+
+# Referência canônica para comparação fuzzy — usamos "mails" em vez de
+# "myles" porque o Vosk produz transcrições em português e "mails" é o
+# padrão mais frequente observado.
+FUZZY_REFERENCES = ["mails", "miles", "myles", "maios"]
+
+# Palavras comuns do português que seriam casadas por fuzzy mas não são
+# a wake word. Adicione aqui qualquer falso positivo observado nos logs.
+FUZZY_BLACKLIST = {
+    "vai", "sao", "mas", "mar", "mau", "mal", "mas", "mao",
+    "pai", "pais", "faz", "das", "nas", "casa", "mesa",
+    "vais", "fais", "sais", "cais", "rais", "dais",
+}
+
+
+def _fuzzy_wake_match(word: str) -> bool:
+    """Verifica se uma palavra é foneticamente similar a alguma referência."""
+    if len(word) < FUZZY_MIN_WORD_LEN:
+        return False
+    if word in FUZZY_BLACKLIST:
+        return False
+    max_dist = FUZZY_MAX_DISTANCE_SHORT if len(word) <= 4 else FUZZY_MAX_DISTANCE_LONG
+    for ref in FUZZY_REFERENCES:
+        dist = _levenshtein(word, ref)
+        if dist <= max_dist:
+            return True
+    return False
+
+
 def extract_command(text: str):
     """
     Procura alguma variante da wake word (ex: "myles", "mails", "miles")
-    na frase reconhecida, usando limite de palavra (word boundary) para
-    não casar substrings dentro de outra palavra.
+    na frase reconhecida.
+
+    Usa duas estratégias em cascata:
+    1. Correspondência exata (word boundary) contra a lista de variantes
+       conhecidas em WAKE_WORDS.
+    2. Correspondência fuzzy (Levenshtein ≤ 2) contra referências fonéticas
+       canônicas — captura variantes inesperadas que o Vosk produziu.
 
     Retorna uma tupla (wake_word_encontrada, texto_do_comando). Se
     nenhuma variante aparecer na frase, retorna (None, None) e a frase
@@ -124,6 +186,7 @@ def extract_command(text: str):
     """
     norm = _normalize(text)
 
+    # --- Passo 1: correspondência exata (mais confiável) ---
     best_match = None
     matched_wake = None
     for wake in WAKE_WORDS:
@@ -133,12 +196,22 @@ def extract_command(text: str):
             best_match = match
             matched_wake = wake
 
-    if best_match is None:
-        return None, None
+    if best_match is not None:
+        command_text = norm[best_match.end():].strip()
+        command_text = re.sub(r"^,?\s*", "", command_text)
+        return matched_wake, command_text
 
-    command_text = norm[best_match.end():].strip()
-    command_text = re.sub(r"^,?\s*", "", command_text)
-    return matched_wake, command_text
+    # --- Passo 2: correspondência fuzzy (fallback) ---
+    # Testa cada palavra da frase para ver se está foneticamente próxima
+    # de alguma referência de wake word.
+    words = norm.split()
+    for i, word in enumerate(words):
+        if _fuzzy_wake_match(word):
+            command_text = " ".join(words[i + 1:]).strip()
+            command_text = re.sub(r"^,?\s*", "", command_text)
+            return word, command_text
+
+    return None, None
 
 
 # --------------------------------------------------------------------
