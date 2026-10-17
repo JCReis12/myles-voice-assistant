@@ -98,7 +98,7 @@ VOSK_MODEL_PATH = _get(
 # geralmente como "mails" ou "miles". Por isso aceitamos várias variantes
 # como válidas (veja core/command_parser.py). Se notar outras transcrições
 # no log de debug do main.py, adicione-as aqui separadas por vírgula.
-WAKE_WORD = _get("WAKE_WORD", "myles,mails,miles,maiuls,my less,maia,maio,maior,maiores")
+WAKE_WORD = _get("WAKE_WORD", "myles,mails,miles,maiuls,my less,maia,maio,maior,maiores,mais,mal,mau,mar,meus,meu,ma is,mais e,maios,mile,mail,mai,maires,mailes,males,mares,maise,mouse,moises,moises")
 
 # --------------------------------------------------------------------
 # Interpretação de comandos (core/command_parser.py)
