@@ -25,17 +25,17 @@ def _get(name: str, default: str = "") -> str:
 # Aplicativos e pastas
 # --------------------------------------------------------------------
 ANTIGRAVITY_PATH = _get(
-    "ANTIGRAVITY_PATH", r"C:\Users\joaoc\Desktop\Antigravity IDE.lnk"
+    "ANTIGRAVITY_PATH", r"C:\Users\joao.junior\Desktop\Antigravity IDE.lnk"
 )
 VSCODE_PATH = _get(
-    "VSCODE_PATH", r"C:\Users\joaoc\Desktop\Visual Studio Code.lnk"
+    "VSCODE_PATH", r"C:\Users\joao.junior\Desktop\Visual Studio Code.lnk"
 )
 
 FRONTEND_PATH = _get(
-    "FRONTEND_PATH", r"C:\Users\joaoc\Desktop\Matéria - Front-end"
+    "FRONTEND_PATH", r"C:\Users\joao.junior\Desktop\Matéria - Front-end"
 )
 BACKEND_PATH = _get(
-    "BACKEND_PATH", r"C:\Users\joaoc\Desktop\Matéria - Back-end"
+    "BACKEND_PATH", r"C:\Users\joao.junior\Desktop\Matéria - Back-end"
 )
 
 # --------------------------------------------------------------------
